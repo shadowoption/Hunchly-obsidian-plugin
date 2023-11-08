@@ -25,7 +25,7 @@ export default class HunchlyObsidianPlugin extends Plugin {
 			// Called when the user clicks the icon.
 			new FileModal(this.app, "Select the exported hunchly case file (zip format).", (result) => {
 				if (result.zipPath){
-					new Notice('Processing the hunchly notes and images in path ' + result.zipPath, 5000);
+					new Notice('Processing the hunchly notes and images in path ' + result.zipPath, 3000);
 					const hunchly = new Hunchly(result.zipPath, result.location, result.consolidate, this)
 					hunchly.process()
 				}

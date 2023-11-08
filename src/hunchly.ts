@@ -1,6 +1,6 @@
 import * as fs_promise from 'fs/promises';
 import * as fs from 'fs';
-import { FileSystemAdapter, Plugin, TFile, Vault } from 'obsidian';
+import { FileSystemAdapter, Plugin, TFile, Vault, Notice } from 'obsidian';
 import * as path from 'path'
 import * as unzipper from 'unzipper';
 import * as tmp from 'tmp';
@@ -67,6 +67,11 @@ export class Hunchly{
     
             // Pipe the read stream through unzipper to extract the contents.
             await readStream.pipe(unzipper.Extract({ path: extractionPath })).promise();
+
+            if (!await this.checkFileOrFolderExistence(extractionPath, "case_data")){
+                new Notice("Not a valid hunchly case file. Use Export > Export Case in the hunchly dashboard.", 5000)
+                return
+            }
             
             const pages = await extractPages(extractionPath)
             const notes = await extractNotes(extractionPath)
@@ -80,8 +85,8 @@ export class Hunchly{
             setTimeout(()=>{tempDir.removeCallback();}, 3000);
             
         } catch (error) {
-            this.updateStatus("Error processing hunchly zip file");
-            console.error(`Error processing hunchly zip file": ${error}`);
+            new Notice("Not a valid hunchly case zip file.", 5000)  
+            console.log(`Error processing hunchly zip file: ${error}`);
         }
     }
 
@@ -91,8 +96,6 @@ export class Hunchly{
                 await fs_promise.access(filePath);
                 return true;
             } catch (err) {
-                // This adds a status bar saying invalid note path
-                this.updateStatus(filePath + " does not exist");
                 return false;
             }
     }
@@ -185,7 +188,7 @@ export class Hunchly{
         try {
             await this.vault.createFolder(path.join(this.hunchlyLocation, directoryPath))
         } catch (error) {
-            console.error(`Error creating the directory: ${error}`);
+            console.log(error);
         }
     }
 
@@ -214,7 +217,7 @@ export class Hunchly{
             const notepath =  path.join(this.hunchlyLocation, "hunchly_notes", filename)
             await this.vault.create(notepath, content)
         } catch (error) {
-            console.error(`Error creating the file in ${filename}: ${error}`);
+            console.log(`Error creating the file in ${filename}: ${error}`);
         }
     }
 
@@ -227,7 +230,7 @@ export class Hunchly{
                 this.vault.append(notefile, content)
             }
         } catch (error) {
-            console.error(`Error appending the file in ${filename}: ${error}`);
+            console.log(`Error appending the file in ${filename}: ${error}`);
         }
     }
 
@@ -267,7 +270,7 @@ async function extractSelectorsHits(zipFilePath: string): Promise<Map<number, nu
             });
         }
     } catch (error) {
-        console.error(`Error parsing the selector_hits.json file: ${error}`);
+        console.log(`Error parsing the selector_hits.json file: ${error}`);
     }
 
     return results
@@ -287,7 +290,7 @@ async function extractSelectors(zipFilePath: string): Promise<Map<number, string
             });
         }
     } catch (error) {
-        console.error(`Error parsing the selectors.json file: ${error}`);
+        console.log(`Error parsing the selectors.json file: ${error}`);
     }
 
     return results
@@ -314,7 +317,7 @@ async function extractPhotos(zipFilePath: string): Promise<Map<number, IPhoto>> 
             });
         }
     } catch (error) {
-        console.error(`Error parsing the tagged_photos.JSON file: ${error}`);
+        console.log(`Error parsing the tagged_photos.JSON file: ${error}`);
     }
 
     return results
@@ -338,7 +341,7 @@ async function extractNotes(zipFilePath: string): Promise<Map<number, INote>> {
             });
         }
     } catch (error) {
-        console.error(`Error parsing the notes JSON file: ${error}`);
+        console.log(`Error parsing the notes JSON file: ${error}`);
     }
 
     return results
@@ -362,7 +365,7 @@ async function extractPages(zipFilePath: string): Promise<Map<number, IPage>> {
             });
         }
     } catch (error) {
-        console.error(`Error parsing the pages JSON file: ${error}`);
+        console.log(`Error parsing the pages JSON file: ${error}`);
     }        
     return results
 }
@@ -372,7 +375,7 @@ async function copyImages(sourcePath: string, destinationPath: string): Promise<
         const fileContent = await fs_promise.readFile(sourcePath);
         await fs_promise.writeFile(destinationPath, fileContent);
     } catch (error) {
-        console.error(`Error copying the file: ${error}`);
+        console.log(`Error copying the file: ${error}`);
     }
 }
 
