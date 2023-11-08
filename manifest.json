@@ -1,9 +1,9 @@
 {
-	"id": "hunchly-obsidian-plugin",
-	"name": "Hunchly Obsidian Plugin",
+	"id": "hunchly",
+	"name": "Hunchly",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Import Notes and images from Hunchly into Obsidian.",
+	"description": "Import notes and images from Hunchly.",
 	"author": "Divya",
 	"isDesktopOnly": true
 }
