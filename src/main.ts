@@ -24,9 +24,11 @@ export default class HunchlyObsidianPlugin extends Plugin {
 		this.addRibbonIcon('hunchly', 'Hunchly Obsidian Plugin', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
 			new FileModal(this.app, "Select the exported hunchly case file (zip format).", (result) => {
-				new Notice('Processing the hunchly notes and images in path ' + result.notepath, 5000);
-				const hunchly = new Hunchly(result.notepath, result.location, result.consolidate, this)
-				hunchly.process()
+				if (result.zipPath){
+					new Notice('Processing the hunchly notes and images in path ' + result.zipPath, 5000);
+					const hunchly = new Hunchly(result.zipPath, result.location, result.consolidate, this)
+					hunchly.process()
+				}
 			}).open();
 			
 		});

@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 const {dialog} = require('electron').remote;
 export class FileModal extends Modal {
-  result: { [key: string]: string }= {"location": "", "consolidate": "", "notepath": ""};
+  result: { [key: string]: string }= {"location": "", "consolidate": "", "zipPath": ""};
   inputString: string;
   onSubmit: (result: { [key: string]: string }) => void;
 
@@ -40,10 +40,10 @@ export class FileModal extends Modal {
           .setButtonText("Select")
           .setCta()
           .onClick(async () => {
-            const filenames = await dialog.showOpenDialog({properties: ["openDirectory","openFile"]}, function (fileNames: any) {
+            const filenames = await dialog.showOpenDialog({properties: ["openFile"]}, function (fileNames: any) {
                 return fileNames
             })
-            this.result.notepath = filenames.filePaths[0]
+            this.result.zipPath = filenames.filePaths[0]
             this.close();
             this.onSubmit(this.result);
           }

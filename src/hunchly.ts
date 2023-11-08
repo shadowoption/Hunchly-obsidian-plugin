@@ -204,7 +204,7 @@ export class Hunchly{
             const sourceImagePath = path.join(source, filename)
             const destinationImagePath = path.join(destination, filename)
             await copyImages(sourceImagePath, destinationImagePath)
-            return fileContent + `![[${path.join("hunchly_notes", "screenshots", `${filename}`)}]]\n`
+            return fileContent + `![[${filename}]]\n`
         }
         return fileContent
     }
