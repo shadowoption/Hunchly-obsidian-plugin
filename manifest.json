@@ -3,7 +3,7 @@
 	"name": "Hunchly Obsidian Plugin",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "This is a plugin to import Hunchly Notes and images",
+	"description": "Import Notes and images from Hunchly into Obsidian.",
 	"author": "Divya",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

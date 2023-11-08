@@ -14,17 +14,17 @@ export class FileModal extends Modal {
   onOpen() {
     const { contentEl } = this;
 
-    contentEl.createEl("h2", {text: "Import Hunchly Notes and Captioned Images"});
+    contentEl.createEl("h3", {text: "Hunchly  -> Obsidian"});
 
     new Setting(contentEl)
-      .setName("Notes location relative to the vault (if empty, notes get added to vault root).")
+      .setName("Enter the Obsidian notes location relative to the vault (if empty, notes get added to vault root).")
       .addText((text) =>
         text.onChange((value) => {
           this.result.location = value
         }));
 
     new Setting(contentEl)
-    .setName("Do you want to consolidate notes by url?")
+    .setName("Do you want to consolidate Hunchly notes by url?")
     .addToggle((toggle) =>
         toggle.onChange((value) => {
             if (value){
@@ -39,14 +39,13 @@ export class FileModal extends Modal {
         btn
           .setButtonText("Select")
           .setCta()
-          .onClick(() => {
-            dialog.showOpenDialog({properties: ["openDirectory","openFile"]}, function (fileNames: any) {
+          .onClick(async () => {
+            const filenames = await dialog.showOpenDialog({properties: ["openDirectory","openFile"]}, function (fileNames: any) {
                 return fileNames
-            }).then((fileNames: any) => {
-                this.result.notepath = fileNames.filePaths[0]
-                this.close();
-                this.onSubmit(this.result);
-            });
+            })
+            this.result.notepath = filenames.filePaths[0]
+            this.close();
+            this.onSubmit(this.result);
           }
         )
     );

@@ -1,6 +1,6 @@
 import * as fs_promise from 'fs/promises';
 import * as fs from 'fs';
-import { FileSystemAdapter, Plugin, Vault } from 'obsidian';
+import { FileSystemAdapter, Plugin, TFile, Vault } from 'obsidian';
 import * as path from 'path'
 import * as unzipper from 'unzipper';
 import * as tmp from 'tmp';
@@ -81,7 +81,7 @@ export class Hunchly{
             
         } catch (error) {
             this.updateStatus("Error processing hunchly zip file");
-            console.error(`Error extracting, analyzing, or deleting the temporary directory: ${error}`);
+            console.error(`Error processing hunchly zip file": ${error}`);
         }
     }
 
@@ -131,12 +131,11 @@ export class Hunchly{
                 if (urlMap.has(page.url) &&  this.consolidate) {
                     const notePath = urlMap.get(page.url)
                     if (notePath){
-                        await updateNoteFile(notePath, fileContent)
+                        await this.updateNoteFile(notePath, fileContent)
                     }
                 } else {
-                    const thisnotepath =  path.join(this.vaultPath,  "hunchly_notes", `${title}.md`)
-                    await createNoteFile(thisnotepath, fileContent)
-                    urlMap.set(page.url, thisnotepath)
+                    await this.createNoteFile(`${title}.md`, fileContent)
+                    urlMap.set(page.url, `${title}.md`)
                 }                
             }
         }
@@ -172,12 +171,11 @@ export class Hunchly{
                 if (urlMap.has(page.url) &&  this.consolidate) {
                     const notePath = urlMap.get(page.url)
                     if (notePath){
-                        await updateNoteFile(notePath, fileContent)
+                        await this.updateNoteFile(notePath, fileContent)
                     }
                 } else {
-                    const thisnotepath =  path.join(this.vaultPath, "hunchly_notes", `${title}.md`)
-                    await createNoteFile(thisnotepath, fileContent)
-                    urlMap.set(page.url, thisnotepath)
+                    await this.createNoteFile(`${title}.md`, fileContent)
+                    urlMap.set(page.url, `${title}.md`)
                 }                
             }
         }
@@ -209,6 +207,28 @@ export class Hunchly{
             return fileContent + `![[${path.join("hunchly_notes", "screenshots", `${filename}`)}]]\n`
         }
         return fileContent
+    }
+
+    private async createNoteFile(filename: string, content: string): Promise<void> {
+        try {
+            const notepath =  path.join(this.hunchlyLocation, "hunchly_notes", filename)
+            await this.vault.create(notepath, content)
+        } catch (error) {
+            console.error(`Error creating the file in ${filename}: ${error}`);
+        }
+    }
+
+    private async updateNoteFile(filename: string, content: string): Promise<void> {
+        try {
+            const notepath =  path.join(this.hunchlyLocation, "hunchly_notes", filename)
+            const notefile = this.vault.getAbstractFileByPath(notepath)
+
+            if (notefile instanceof TFile){
+                this.vault.append(notefile, content)
+            }
+        } catch (error) {
+            console.error(`Error appending the file in ${filename}: ${error}`);
+        }
     }
 
 }
@@ -356,22 +376,5 @@ async function copyImages(sourcePath: string, destinationPath: string): Promise<
     }
 }
 
-
-
-async function createNoteFile(filePath: string, content: string): Promise<void> {
-    try {
-        await fs_promise.writeFile(filePath, content, 'utf8');
-    } catch (error) {
-        console.error(`Error creating the file in ${filePath}: ${error}`);
-    }
-}
-
-async function updateNoteFile(filePath: string, content: string): Promise<void> {
-    try {
-        await fs_promise.appendFile(filePath, content, 'utf8');
-    } catch (error) {
-        console.error(`Error appending the file in ${filePath}: ${error}`);
-    }
-}
 
 
