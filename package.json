@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "hunchly-obsidian-plugin",
 	"version": "1.0.0",
 	"description": "Import Hunchly notes and images into obsidian",
 	"main": "main.js",
