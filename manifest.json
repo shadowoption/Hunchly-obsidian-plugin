@@ -4,6 +4,6 @@
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Import notes and images from Hunchly.",
-	"author": "Divya",
+	"author": "sapperlabs",
 	"isDesktopOnly": true
 }
