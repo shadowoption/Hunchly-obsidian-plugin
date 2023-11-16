@@ -100,11 +100,6 @@ export class Hunchly{
             }
     }
 
-    private async updateStatus(status: string) {
-        const statusBarItemEl = this.plugin.addStatusBarItem();
-        statusBarItemEl.setText(status);
-    }
-
     private async processNotes(notes: Map<number, INote>, pages: Map<number, IPage>, selectors: Map<number, string>, selectorHits: Map<number, number[]>, extractionPath : string){
         await this.createDirectoryIfNotExists(path.join("hunchly_notes", "screenshots"))
         const urlMap = new Map<string, string>()
@@ -127,17 +122,21 @@ export class Hunchly{
                     }
                 }
 
-                fileContent = fileContent + `${await this.processNoteContent(value.note)}\n\n`
+                let note = await this.processNoteContent(value.note)
+                if(note && note != null){
+                    fileContent = fileContent + `${note}\n\n`
+                }
+
                 fileContent = await this.addImages(path.join(extractionPath, "note_screenshots"), path.join(this.vaultPath, "hunchly_notes", "screenshots"), `${key}.jpeg`, fileContent)
                 fileContent = fileContent + "\n---\n"
 
                 if (urlMap.has(page.url) &&  this.consolidate) {
                     const notePath = urlMap.get(page.url)
                     if (notePath){
-                        await this.updateNoteFile(notePath, fileContent)
+                        await this.updateNoteFile(notePath, fileContent, "hunchly_notes")
                     }
                 } else {
-                    await this.createNoteFile(`${title}.md`, fileContent)
+                    await this.createNoteFile(`${title}.md`, fileContent, "hunchly_notes")
                     urlMap.set(page.url, `${title}.md`)
                 }                
             }
@@ -145,7 +144,7 @@ export class Hunchly{
     }
 
     private async processImages(photos: Map<number, IPhoto>, pages: Map<number, IPage>, selectors: Map<number, string>, selectorHits: Map<number, number[]>, extractionPath : string){
-        await this.createDirectoryIfNotExists(path.join("hunchly_notes", "screenshots"))
+        await this.createDirectoryIfNotExists(path.join("hunchly_captioned_images", "screenshots"))
         const urlMap = new Map<string, string>()
         for (const [key, value] of photos) {
             const page = pages.get(value.pageid)
@@ -166,18 +165,21 @@ export class Hunchly{
                         fileContent = await addSelectors(selectorhits, selectors, fileContent)
                     }
                 }   
-                    
-                fileContent = fileContent + `${await this.processNoteContent(value.caption)}\n\n`
+                
+                let caption = await this.processNoteContent(value.caption)
+                if(caption && caption != "null"){
+                    fileContent = fileContent + `${caption}\n\n`
+                }
                 fileContent = await this.addImages(path.join(extractionPath, "tagged_photos"), path.join(this.vaultPath, "hunchly_notes", "screenshots"), value.photopath, fileContent)
                 fileContent = fileContent + "\n---\n"
 
                 if (urlMap.has(page.url) &&  this.consolidate) {
                     const notePath = urlMap.get(page.url)
                     if (notePath){
-                        await this.updateNoteFile(notePath, fileContent)
+                        await this.updateNoteFile(notePath, fileContent, "hunchly_captioned_images")
                     }
                 } else {
-                    await this.createNoteFile(`${title}.md`, fileContent)
+                    await this.createNoteFile(`${title}.md`, fileContent, "hunchly_captioned_images")
                     urlMap.set(page.url, `${title}.md`)
                 }                
             }
@@ -212,18 +214,18 @@ export class Hunchly{
         return fileContent
     }
 
-    private async createNoteFile(filename: string, content: string): Promise<void> {
+    private async createNoteFile(filename: string, content: string, location: string): Promise<void> {
         try {
-            const notepath =  path.join(this.hunchlyLocation, "hunchly_notes", filename)
+            const notepath =  path.join(this.hunchlyLocation, location, filename)
             await this.vault.create(notepath, content)
         } catch (error) {
             console.log(`Error creating the file in ${filename}: ${error}`);
         }
     }
 
-    private async updateNoteFile(filename: string, content: string): Promise<void> {
+    private async updateNoteFile(filename: string, content: string, location: string): Promise<void> {
         try {
-            const notepath =  path.join(this.hunchlyLocation, "hunchly_notes", filename)
+            const notepath =  path.join(this.hunchlyLocation, location, filename)
             const notefile = this.vault.getAbstractFileByPath(notepath)
 
             if (notefile instanceof TFile){
