@@ -1,5 +1,7 @@
 # Hunchly Obsidian Sample Plugin
 
+[Hunchly](https://www.hunch.ly) is a web capture tool designed For online investigations
+
 This is an obsidian plugin to convert Hunchly notes and captioned images into obsidian notes. Also adds the selector as obsidian tags.
 
 ## How to use
