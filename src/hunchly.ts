@@ -62,11 +62,8 @@ export class Hunchly{
             const tempDir = tmp.dirSync({ unsafeCleanup: true });
             const extractionPath = tempDir.name;
     
-            // Create a read stream for the zip file.
-            const readStream = fs.createReadStream(zipFilePath);
-    
-            // Pipe the read stream through unzipper to extract the contents.
-            await readStream.pipe(unzipper.Extract({ path: extractionPath })).promise();
+            // unzip the file
+            await unzipper.Open.file(zipFilePath).then(d => d.extract({path: extractionPath, concurrency: 5}));
 
             if (!await this.checkFileOrFolderExistence(extractionPath, "case_data")){
                 new Notice("Not a valid hunchly case file. Use Export > Export Case in the hunchly dashboard.", 5000)
