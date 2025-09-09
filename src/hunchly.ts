@@ -4,6 +4,12 @@ import { FileSystemAdapter, Plugin, TFile, Vault, Notice } from 'obsidian';
 import * as path from 'path'
 import * as unzipper from 'unzipper';
 import * as tmp from 'tmp';
+import { parseDocument } from "htmlparser2";
+import { textContent } from "domutils";
+import nlp from "compromise";
+import { decode } from "he";
+import * as qp from "quoted-printable";
+import { htmlToText } from "html-to-text";
 
 interface IPage {
     title: string;
@@ -26,7 +32,6 @@ interface IPhoto {
     photohash:string;
     photopath:string;
 }
-
 export class Hunchly{
     hunchlyExportPath: string;
     vaultPath: string;
@@ -35,11 +40,20 @@ export class Hunchly{
     hunchlyLocation: string
     consolidate: boolean
 
-    pages: Map<string, IPage>
-    notes: Map<string, INote>
+    pages: Map<number, IPage>
+    notes: Map<number, INote>
     selector: Map<number, string>
     selectorHits: Map<number, number[]>
-    taggedPhotos: Map<string, IPhoto>
+    taggedPhotos: Map<number, IPhoto>
+    extractedData: Map<number, Map<string, string[]>>
+
+    regexMap: Record<string, RegExp> = {
+        // phone: /\+?\d[\d\-\s]{7,}\d/g,
+        ip: /\b(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?:\.|$)){4}\b/g, // stricter IPv4
+        email: /[A-Za-z0-9]+[A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,   // added \b for boundaries
+        // Facebook: either profile.php?id=123 OR /username (excluding common reserved paths)
+        social_media: /(?:https?:\/\/)?(?:www.)?(?:twitter|medium|facebook|vimeo|instagram)(?:.com\/)?([@a-zA-Z0-9-_]+)/img
+    };
 
     constructor(hunchlyExportPath: string, vaultlocation: string, consolidate: string, plugin: Plugin) {
         this.hunchlyExportPath = hunchlyExportPath;
@@ -70,14 +84,16 @@ export class Hunchly{
                 return
             }
             
-            const pages = await extractPages(extractionPath)
-            const notes = await extractNotes(extractionPath)
-            const photos = await extractPhotos(extractionPath)
-            const selectors = await extractSelectors(extractionPath)
-            const selectorHits = await extractSelectorsHits(extractionPath)
+            this.pages = await extractPages(extractionPath)
+            this.notes = await extractNotes(extractionPath)
+            this.taggedPhotos = await extractPhotos(extractionPath)
+            this.selector = await extractSelectors(extractionPath)
+            this.selectorHits = await extractSelectorsHits(extractionPath)
+            this.extractedData = await extractData(extractionPath)
             
-            await this.processNotes(notes, pages, selectors, selectorHits, extractionPath)
-            await this.processImages(photos, pages, selectors, selectorHits, extractionPath)
+            await this.processPages(extractionPath)
+            await this.processNotes(extractionPath)
+            await this.processImages(extractionPath)
 
             setTimeout(()=>{tempDir.removeCallback();}, 3000);
             
@@ -97,12 +113,41 @@ export class Hunchly{
             }
     }
 
-    private async processNotes(notes: Map<number, INote>, pages: Map<number, IPage>, selectors: Map<number, string>, selectorHits: Map<number, number[]>, extractionPath : string){
+    private async processPages(extractionPath : string){
+        await this.createDirectoryIfNotExists(path.join("hunchly_captures", "screenshots"))
+        for (const [key, page] of this.pages) {
+            const selectorhits = this.selectorHits.get(key)
+            if (page) {
+                let title = page.title
+                let fileContent = ""
+                title = title.substring(0, 65).replace(/[&/\\#,+()$~%.'":*?<>{} ]/g,'_')
+                title = `${title}-captures-${key}`
+
+                fileContent = "---\n"
+                fileContent = fileContent + `Date: ${page.date}\n`
+                fileContent = fileContent + `URL: ${page.url}\n`
+                fileContent = fileContent + "---\n"
+
+                fileContent = await this.addDataExtractors(key, fileContent)
+                fileContent = await this.extractNamesAndLocationsFromMhtml(path.join(extractionPath, "pages", `${key}.mhtml`), fileContent)
+                if(selectorhits){
+                    fileContent = await addSelectors(selectorhits, this.selector, fileContent)
+                }
+
+                fileContent = await this.addImages(path.join(extractionPath, "pages"), path.join(this.vaultPath, "hunchly_captures", "screenshots"), `${key}.jpeg`, fileContent)
+                fileContent = fileContent + "\n---\n"
+                
+                await this.createMDFile(`${title}.md`, fileContent, "hunchly_captures")
+            }
+        }
+    }
+
+    private async processNotes(extractionPath : string){
         await this.createDirectoryIfNotExists(path.join("hunchly_notes", "screenshots"))
         const urlMap = new Map<string, string>()
-        for (const [key, value] of notes) {
-            const page = pages.get(value.pageid)
-            const selectorhits = selectorHits.get(value.pageid)
+        for (const [key, value] of this.notes) {
+            const page = this.pages.get(value.pageid)
+            const selectorhits = this.selectorHits.get(value.pageid)
             if (page) {
                 let title = page.title
                 let fileContent = ""
@@ -115,7 +160,7 @@ export class Hunchly{
                     fileContent = fileContent + `URL: ${page.url}\n`
                     fileContent = fileContent + "---\n"
                     if(selectorhits){
-                        fileContent = await addSelectors(selectorhits, selectors, fileContent)
+                        fileContent = await addSelectors(selectorhits, this.selector, fileContent)
                     }
                 }
 
@@ -133,19 +178,19 @@ export class Hunchly{
                         await this.updateNoteFile(notePath, fileContent, "hunchly_notes")
                     }
                 } else {
-                    await this.createNoteFile(`${title}.md`, fileContent, "hunchly_notes")
+                    await this.createMDFile(`${title}.md`, fileContent, "hunchly_notes")
                     urlMap.set(page.url, `${title}.md`)
                 }                
             }
         }
     }
 
-    private async processImages(photos: Map<number, IPhoto>, pages: Map<number, IPage>, selectors: Map<number, string>, selectorHits: Map<number, number[]>, extractionPath : string){
+    private async processImages(extractionPath : string){
         await this.createDirectoryIfNotExists(path.join("hunchly_captioned_images", "screenshots"))
         const urlMap = new Map<string, string>()
-        for (const [key, value] of photos) {
-            const page = pages.get(value.pageid)
-            const selectorhits = selectorHits.get(value.pageid)
+        for (const [key, value] of this.taggedPhotos) {
+            const page = this.pages.get(value.pageid)
+            const selectorhits = this.selectorHits.get(value.pageid)
             if (page) {
                 let title = page.title
                 title = title.substring(0, 50).replace(/[&/\\#,+()$~%.'":*?<>{} ]/g,'_')
@@ -159,7 +204,7 @@ export class Hunchly{
                     fileContent = fileContent + `HASH: ${value.photohash}\n`
                     fileContent = fileContent + "---\n"
                     if(selectorhits){
-                        fileContent = await addSelectors(selectorhits, selectors, fileContent)
+                        fileContent = await addSelectors(selectorhits, this.selector, fileContent)
                     }
                 }   
                 
@@ -167,7 +212,12 @@ export class Hunchly{
                 if(caption && caption != "null"){
                     fileContent = fileContent + `${caption}\n\n`
                 }
-                fileContent = await this.addImages(path.join(extractionPath, "tagged_photos"), path.join(this.vaultPath, "hunchly_notes", "screenshots"), value.photopath, fileContent)
+                fileContent = await this.addImages(
+                    path.join(extractionPath, "tagged_photos"), 
+                    path.join(this.vaultPath, "hunchly_captioned_images", "screenshots"), 
+                    value.photopath, 
+                    fileContent
+                )
                 fileContent = fileContent + "\n---\n"
 
                 if (urlMap.has(page.url) &&  this.consolidate) {
@@ -176,7 +226,7 @@ export class Hunchly{
                         await this.updateNoteFile(notePath, fileContent, "hunchly_captioned_images")
                     }
                 } else {
-                    await this.createNoteFile(`${title}.md`, fileContent, "hunchly_captioned_images")
+                    await this.createMDFile(`${title}.md`, fileContent, "hunchly_captioned_images")
                     urlMap.set(page.url, `${title}.md`)
                 }                
             }
@@ -211,10 +261,10 @@ export class Hunchly{
         return fileContent
     }
 
-    private async createNoteFile(filename: string, content: string, location: string): Promise<void> {
+    private async createMDFile(filename: string, content: string, location: string): Promise<void> {
         try {
-            const notepath =  path.join(this.hunchlyLocation, location, filename)
-            await this.vault.create(notepath, content)
+            const filepath =  path.join(this.hunchlyLocation, location, filename)
+            await this.vault.create(filepath, content)
         } catch (error) {
             console.log(`Error creating the file in ${filename}: ${error}`);
         }
@@ -233,8 +283,86 @@ export class Hunchly{
         }
     }
 
-}
+    private async addDataExtractors(pageId: number, fileContent: string): Promise<string>{
+        const matches = this.extractedData.get(pageId)
+        if (matches) {
+            for (const [key, data] of matches.entries()){
+                fileContent = fileContent + `#### ${key}:\n\n`
+                for (const value of data){
+                    fileContent = fileContent + `[[${value}]]\t`
+                }
+                fileContent = fileContent + "\n\n"
+            }
+        } 
+        
+        return fileContent + "\n\n---\n"
+    }
 
+
+
+    private async extractNamesAndLocationsFromMhtml(filePath: string, fileContent: string): Promise<string>{
+        const raw = await fs_promise.readFile(filePath, "utf8");
+        const htmlParts = raw.match(/<html[\s\S]*?<\/html>/gi);
+
+        if (!htmlParts) {
+            return fileContent
+        };
+
+        let allText = "";
+
+        for (const m of htmlParts) {
+            // Decode quoted-printable first
+            const decodedQP = qp.decode(m.toString());
+
+            // Decode HTML entities (&lt; &amp; etc.)
+            const cleanHtml = decode(decodedQP.toString());
+
+            // Parse and extract text
+            const cleanText = htmlToText(cleanHtml, {
+                wordwrap: 130,
+                decodeEntities: true
+            });
+            // allText += " " + textContent(dom);
+            allText += " " + cleanText;
+        }
+        
+        const dom = parseDocument(allText);
+        const text = textContent(dom)
+
+        const doc = nlp(text);
+        const people = Array.from(
+            new Set(doc.people().out("array").map((p: string) => cleanString(p)))
+        );
+
+        const places = Array.from(
+            new Set(doc.places().out("array").map((p: string) => cleanString(p)))
+        );
+
+        const orgs = Array.from(
+            new Set(doc.organizations().out("array").map((p: string) => cleanString(p)))
+        );
+        
+        fileContent = fileContent + `#### People:\n\n`
+        for (const value of people){
+            fileContent = fileContent + `[[${value}]]\t`
+        }
+        fileContent = fileContent + "\n\n"
+
+        fileContent = fileContent + `#### Location:\n\n`
+        for (const value of places){
+            fileContent = fileContent + `[[${value}]]\t`
+        }
+        fileContent = fileContent + "\n\n"
+
+         fileContent = fileContent + `#### Organizations:\n\n`
+        for (const value of orgs){
+            fileContent = fileContent + `[[${value}]]\t`
+        }
+        fileContent = fileContent + "\n\n"
+        
+        return fileContent + "\n\n---\n"
+    }
+}
 
 async function addSelectors(selectorhits: number[], selectors: Map<number, string>, fileContent: string): Promise<string>{
     fileContent = fileContent + "#### Selectors\n\n"
@@ -369,14 +497,73 @@ async function extractPages(zipFilePath: string): Promise<Map<number, IPage>> {
     return results
 }
 
+async function extractData(zipFilePath: string) : Promise<Map<number, Map<string, string[]>>> {
+    const dataMatches = path.join(zipFilePath, "case_data", "data_matches.json")
+    const dataExtractors = path.join(zipFilePath, "case_data", "data_extractors.json")
+    const result = new Map<number, Map<string, string[]>>()
+    
+    try {
+        interface Extractor {
+            ExtractorId: number;
+            PageId: number;
+            DataRecordId: number;
+            Data: string;
+        }
+            
+        const extractors = JSON.parse(await fs_promise.readFile(dataExtractors, 'utf8'));
+        const extractorMap = new Map<number, string>()
+        if (Array.isArray(extractors)) {
+            extractors.forEach((item, index) => {
+                extractorMap.set(item.ID, item.Name)
+            });
+        }
+
+        if (extractorMap.size > 0) {
+            const matches: Extractor[]= JSON.parse(await fs_promise.readFile(dataMatches, 'utf8'));
+            if (Array.isArray(matches)) {
+                matches.forEach((item, index) => {
+                    const extractorName = extractorMap.get(item.ExtractorId)
+                    if (result && result.has(item.PageId)){
+                        const data= result.get(item.PageId)
+                        if (extractorName && data && data.has(extractorName)){
+                            const val = data.get(extractorName) || []
+                            val.push(item.Data)
+                        } else if (extractorName && data) {
+                            data.set(extractorName, [item.Data])
+                        } else {
+                            console.log("data is undefined")
+                        }
+                    } else {
+                        const ex = new Map<string, string[]>()
+                        if (extractorName) {
+                            result.set(item.PageId, ex.set(extractorName, [item.Data]))
+                        }
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.log(`Error parsing the selectors.json file: ${error}`);
+    }
+
+    return result
+} 
+
 async function copyImages(sourcePath: string, destinationPath: string): Promise<void> {
     try {
-        const fileContent = await fs_promise.readFile(sourcePath);
-        await fs_promise.writeFile(destinationPath, fileContent);
+        await fs_promise.copyFile(sourcePath, destinationPath);
     } catch (error) {
         console.log(`Error copying the file: ${error}`);
     }
 }
 
-
-
+function cleanString(str: string): string {
+  return str
+    .trim()
+    // Remove anything that’s not a letter, number, space, or basic punctuation
+    .replace(/[^a-zA-Z0-9\s.'-]/g, "")
+    // Collapse multiple spaces
+    .replace(/\s+/g, " ")
+    // Remove leading/trailing punctuation like commas, periods, dashes
+    .replace(/^[,.\-'\s]+|[,.\-'\s]+$/g, "");
+}   

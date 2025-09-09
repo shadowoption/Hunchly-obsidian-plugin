@@ -12,18 +12,27 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
+		"@types/he": "^1.2.3",
+		"@types/html-to-text": "^9.0.4",
+		"@types/htmlparser2": "^3.10.7",
 		"@types/node": "^16.11.6",
+		"@types/quoted-printable": "^1.0.2",
 		"@types/tmp": "^0.2.5",
 		"@types/unzipper": "^0.10.8",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
-		"esbuild": "0.17.3",
+		"esbuild": "^0.25.9",
 		"obsidian": "latest",
 		"tslib": "2.4.0",
 		"typescript": "4.7.4"
 	},
 	"dependencies": {
+		"compromise": "^14.14.4",
+		"he": "^1.2.0",
+		"html-to-text": "^9.0.5",
+		"htmlparser2": "^10.0.0",
+		"quoted-printable": "^1.0.1",
 		"tmp": "^0.2.1",
 		"unzipper": "^0.10.14"
 	}

@@ -23,16 +23,16 @@ export class FileModal extends Modal {
           this.result.location = value
         }));
 
-    new Setting(contentEl)
-    .setName("Do you want to consolidate Hunchly notes by url?")
-    .addToggle((toggle) =>
-        toggle.onChange((value) => {
-            if (value){
-                this.result.consolidate = "true"
-            }else {
-                this.result.consolidate = "false"
-            }
-        }));
+    // new Setting(contentEl)
+    // .setName("Do you want to consolidate Hunchly notes by url?")
+    // .addToggle((toggle) =>
+    //     toggle.onChange((value) => {
+    //         if (value){
+    //             this.result.consolidate = "true"
+    //         }else {
+    //             this.result.consolidate = "false"
+    //         }
+    //     }));
     new Setting(contentEl)
       .setName(this.inputString)
       .addButton((btn) =>
